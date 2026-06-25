@@ -32,7 +32,7 @@ func main() {
 		if path == "/" {
 			fmt.Printf("%s/ > %s", colorGreen, coloReset)
 		} else {
-			fmt.Printf("%s%s/ > %s", colorGreen, path, coloReset)
+			fmt.Printf("%s%s/ %s> %s", colorGreen, path, colorYellow, coloReset)
 		}
 
 		//read the keyboard input
