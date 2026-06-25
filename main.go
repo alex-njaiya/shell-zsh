@@ -8,22 +8,31 @@ import (
 	"strings"
 )
 
+// preffix
+const colorPreffix = "\033["
+const (
+	coloReset   string = colorPreffix + "0m"
+	colorGreen  string = colorPreffix + "32m"
+	colorBlue   string = colorPreffix + "34m"
+	colorCyan   string = colorPreffix + "36m"
+	colorYellow string = colorPreffix + "33m"
+)
+
 func main() {
 	reader := bufio.NewReader(os.Stdin)
-
 	// listen for every write from the keyboard
 	for {
 		path, err := getpath()
 
 		if err != nil {
-			fmt.Print("[>] ")
-		} else {
-			if path == "/" {
-				fmt.Printf("[%s] > ", path)
-			} else {
-				fmt.Printf("[%s/] > ", path)
-			}
+			fmt.Printf("%s > %s", colorGreen, coloReset)
+			continue
+		}
 
+		if path == "/" {
+			fmt.Printf("%s/ > %s", colorGreen, coloReset)
+		} else {
+			fmt.Printf("%s%s/ > %s", colorGreen, path, coloReset)
 		}
 
 		//read the keyboard input
@@ -79,6 +88,7 @@ func execInput(input string) error {
 	// set the correct output device
 	cmd.Stderr = os.Stderr
 	cmd.Stdout = os.Stdout
+	cmd.Stdin = os.Stdin
 
 	// execute the command and return the error
 	return cmd.Run()
@@ -98,16 +108,15 @@ func getpath() (path string, err error) {
 
 func formatHomeDirPath(target string) (path string, err error) {
 	// get the homedirpath
-	full_path, err := os.UserHomeDir()
+	fullPath, err := os.UserHomeDir()
 
 	if err != nil {
 		return "", err
 	}
 
-
-	if strings.HasPrefix(target, full_path) {
+	if strings.HasPrefix(target, fullPath) {
 		// get the base
-		tilde := strings.Replace(target, full_path, "~", 1)
+		tilde := strings.Replace(target, fullPath, "~", 1)
 		return tilde, err
 	}
 
