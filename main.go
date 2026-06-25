@@ -111,6 +111,6 @@ func formatHomeDirPath(target string) (path string, err error) {
 		return tilde, err
 	}
 
-	return full_path, nil
+	return target, nil
 
 }
