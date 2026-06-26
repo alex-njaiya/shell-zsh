@@ -1,11 +1,13 @@
 package main
 
 import (
-	"bufio"
 	"fmt"
+	"log"
 	"os"
 	"os/exec"
 	"strings"
+
+	"golang.org/x/term"
 )
 
 // preffix
@@ -18,10 +20,32 @@ const (
 	colorYellow string = colorPreffix + "33m"
 )
 
+var (
+	history      []string
+	historyIndex int
+	currentInput string
+)
+
 func main() {
-	reader := bufio.NewReader(os.Stdin)
+
+	// fd for the standard input
+	fd := int(os.Stdin.Fd())
+
+	// put the terminal into raw mode
+	oldState, err := term.MakeRaw(fd)
+
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	// restore the terminal state when main exists or finishes reading
+	defer term.Restore(fd, oldState)
+
+	buf := make([]byte, 3)
 	// listen for every write from the keyboard
+outer:
 	for {
+		currentInput = ""
 		path, err := getpath()
 
 		if err != nil {
@@ -32,25 +56,91 @@ func main() {
 		if path == "/" {
 			fmt.Printf("%s/ > %s", colorGreen, coloReset)
 		} else {
-			fmt.Printf("%s%s/ > %s", colorGreen, path, coloReset)
+			fmt.Printf("%s%s/ %s> %s", colorGreen, path, colorYellow, coloReset)
 		}
 
 		//read the keyboard input
-		input, err := reader.ReadString('\n')
+	inner:
+		for {
+			n, err := readInput(buf)
 
-		if err != nil {
-			fmt.Fprintln(os.Stderr, err)
+			if err != nil {
+				break outer
+			}
+
+			// check for specific escape sequences
+			if n == 3 && buf[0] == 27 && buf[1] == '[' {
+				if buf[2] == 'A' {
+					// up arrow pressed. Cycle to previous command history
+					// // decrement the history index
+					if historyIndex > 0 {
+						historyIndex -= 1
+
+					}
+
+					// // render history[historyIndex]
+					currentInput = history[historyIndex]
+					fmt.Print(currentInput)
+					continue
+				}
+
+				if buf[2] == 'B' {
+					// Down arrow pressed. Cycle to the next command history
+					continue
+				}
+			}
+
+			//check for the enterkey to execute command.
+			// In raw mode enter sends a \r carriage return or newline
+			if buf[0] == '\r' || buf[0] == '\n' {
+				fmt.Print("\n")
+
+				// save to history and update the histryIndex
+				if currentInput != "" {
+					history = append(history, currentInput)
+					historyIndex = len(history)
+				}
+				break inner // break out of the reading loop to execute the command
+			}
+
+			if buf[0] == '\x7f' {
+				// delete the last char
+				if len(currentInput) > 0 {
+					// remove the last character from the internal string tracker
+					currentInput = currentInput[:len(currentInput)-1]
+
+					// move the cursor back, overwrite with space move cursor back
+					fmt.Print("\b \b")
+				}
+				continue
+			}
+
+			currentInput += string(buf[:n])
+			fmt.Print(string(buf[:n]))
+
 		}
 
 		// handle the input execution
-		if err = execInput(input); err != nil {
+		if err = execInput(currentInput); err != nil {
 			fmt.Fprintln(os.Stderr, err)
 		}
 	}
 }
 
+func readInput(buf []byte) (input int, err error) {
+
+	n, err := os.Stdin.Read(buf)
+
+	if err != nil {
+		return 0, err
+	}
+
+	return n, nil
+}
+
 func execInput(input string) error {
 	// remove the new line characte at the end of the input
+	// TODO: We have to redo this because we are
 	args := strings.Fields(input)
 
 	if len(args) == 0 {
