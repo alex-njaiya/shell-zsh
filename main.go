@@ -72,20 +72,39 @@ outer:
 			if n == 3 && buf[0] == 27 && buf[1] == '[' {
 				if buf[2] == 'A' {
 					// up arrow pressed. Cycle to previous command history
-					// // decrement the history index
-					if historyIndex > 0 {
-						historyIndex -= 1
+					if len(history) > 0 && historyIndex > 0 {
+						historyIndex--
+						currentInput = history[historyIndex]
+
+						// 1.\r moves cursor to start of line
+						// 2. \033[K clears everything from cursor position to the end of the line
+						fmt.Print("\r\033[K")
+
+						// Reprint your prompt first so it doesn't disappear
+						rePrintPrompt(path)
+						fmt.Print(currentInput)
 
 					}
-
-					// // render history[historyIndex]
-					currentInput = history[historyIndex]
-					fmt.Print(currentInput)
 					continue
 				}
 
 				if buf[2] == 'B' {
 					// Down arrow pressed. Cycle to the next command history
+					if historyIndex < len(history) {
+						historyIndex += 1
+						// clear any input when the down button is pressed
+						fmt.Print("\r\033[K")
+
+						rePrintPrompt(path)
+
+						if historyIndex == len(history) {
+							// if the hisrory index == end of the history replace with the current input text
+							currentInput = string(buf[:n])
+						} else {
+							currentInput = history[historyIndex]
+							fmt.Print(currentInput)
+						}
+					}
 					continue
 				}
 			}
@@ -93,7 +112,7 @@ outer:
 			//check for the enterkey to execute command.
 			// In raw mode enter sends a \r carriage return or newline
 			if buf[0] == '\r' || buf[0] == '\n' {
-				fmt.Print("\n")
+				fmt.Print("\r\n")
 
 				// save to history and update the histryIndex
 				if currentInput != "" {
@@ -115,14 +134,29 @@ outer:
 				continue
 			}
 
+			if buf[0] == 3 {
+				fmt.Print("\r\n")
+				break outer
+			}
+
 			currentInput += string(buf[:n])
 			fmt.Print(string(buf[:n]))
 
 		}
 
+		// temprarily restore the terminal to normal mode
+		term.Restore(fd, oldState)
+
 		// handle the input execution
 		if err = execInput(currentInput); err != nil {
 			fmt.Fprintln(os.Stderr, err)
+		}
+
+		// re-enable raw mode immediately so the shell can read keys
+		oldState, err = term.MakeRaw(fd)
+
+		if err != nil {
+			log.Fatal(err)
 		}
 	}
 }
@@ -212,4 +246,12 @@ func formatHomeDirPath(target string) (path string, err error) {
 
 	return target, nil
 
+}
+
+func rePrintPrompt(path string) {
+	if path == "/" {
+		fmt.Printf("\r%s/ > %s", colorGreen, coloReset)
+	} else {
+		fmt.Printf("\r%s%s/ %s> %s", colorGreen, path, colorYellow, coloReset)
+	}
 }
