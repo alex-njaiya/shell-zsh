@@ -1,0 +1,9 @@
+rm -r command-history.txt
+exit
+ls
+exit
+ls
+cat go.sum
+exit
+rm -r s
+exit

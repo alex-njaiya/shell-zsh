@@ -28,6 +28,8 @@ var (
 	unexecutedInput string
 )
 
+var filename = "command-history.txt"
+
 func main() {
 
 	// fd for the standard input
@@ -219,9 +221,18 @@ func execInput(input string) error {
 		// if there is an argument change to that specific argument
 		return os.Chdir(arguments[0])
 	case "exit", "Exit":
-		if err := saveHistory(history); err != nil {
-			return err
+		err := saveHistory(utils.Write{
+			Filename: filename,
+			History:  history,
+		})
+
+		if err != nil {
+			fmt.Printf("Error saving configuration history: %v", err)
+		} else {
+			fmt.Println("Command session saved successfully")
 		}
+
+		history = nil
 		os.Exit(0)
 	}
 
@@ -275,41 +286,13 @@ func rePrintPrompt(path string) {
 	}
 }
 
-func saveHistory(content []string) error {
-	// open the file and catch any errors
-	file, err := os.Create("command-history.txt")
-
-	if err != nil {
-		return err
-	}
-	// defer closing the file
-	defer file.Close()
-
-	// if the file already exists and has content append at the end
-	IsEmpty, err := utils.IsfileEmpty(file.Name())
-
-	if err != nil {
-		fmt.Print("Error: ", err)
-		return err
+func saveHistory(writer utils.FileWriter) error {
+	if writer == nil {
+		return fmt.Errorf("Cannot save history: Provided writer is nil")
 	}
 
-	// write to that file in chunks
-	// the slice history is an array of strings indexed using the historyIndex
-	lines := strings.Join(content, "\n") + "\n"
-	if IsEmpty {
-		bytesWritten, err := file.WriteString(lines)
-
-		if err != nil {
-			fmt.Print("Error writing to file: ", err)
-		}
-
-		fmt.Printf("Successfully wrote %d bytes to command-history.txt\n", bytesWritten)
-
-	} else {
-		// append at the end of the file
-		if err := utils.AppendToFile(file.Name(), content); err != nil {
-			return err
-		}
+	if err := writer.WriteToFile(); err != nil {
+		return fmt.Errorf("Failed to save history: %v", err)
 	}
 
 	return nil
