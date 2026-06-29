@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"golang.org/x/term"
+	"text-based-shell/utils"
 )
 
 // preffix
@@ -218,6 +219,9 @@ func execInput(input string) error {
 		// if there is an argument change to that specific argument
 		return os.Chdir(arguments[0])
 	case "exit", "Exit":
+		if err := saveHistory(history); err != nil {
+			return err
+		}
 		os.Exit(0)
 	}
 
@@ -269,4 +273,44 @@ func rePrintPrompt(path string) {
 	} else {
 		fmt.Printf("\r%s%s/ %s> %s", colorGreen, path, colorYellow, coloReset)
 	}
+}
+
+func saveHistory(content []string) error {
+	// open the file and catch any errors
+	file, err := os.Create("command-history.txt")
+
+	if err != nil {
+		return err
+	}
+	// defer closing the file
+	defer file.Close()
+
+	// if the file already exists and has content append at the end
+	IsEmpty, err := utils.IsfileEmpty(file.Name())
+
+	if err != nil {
+		fmt.Print("Error: ", err)
+		return err
+	}
+
+	// write to that file in chunks
+	// the slice history is an array of strings indexed using the historyIndex
+	lines := strings.Join(content, "\n") + "\n"
+	if IsEmpty {
+		bytesWritten, err := file.WriteString(lines)
+
+		if err != nil {
+			fmt.Print("Error writing to file: ", err)
+		}
+
+		fmt.Printf("Successfully wrote %d bytes to command-history.txt\n", bytesWritten)
+
+	} else {
+		// append at the end of the file
+		if err := utils.AppendToFile(file.Name(), content); err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
