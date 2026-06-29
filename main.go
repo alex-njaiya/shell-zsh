@@ -23,6 +23,7 @@ const (
 
 var (
 	history         []string
+	sessionHistory  []string
 	historyIndex    int
 	currentInput    string
 	unexecutedInput string
@@ -31,6 +32,19 @@ var (
 var filename = "command-history.txt"
 
 func main() {
+	var err error
+	// load the history file into memory
+	logger := &utils.Write{
+		Filename: filename,
+		History:  history,
+	}
+
+	history, err = logger.ReadFromFile()
+
+	if err != nil {
+		fmt.Printf("Error loading history: %v\n", err)
+	}
+
 
 	// fd for the standard input
 	fd := int(os.Stdin.Fd())
@@ -126,6 +140,7 @@ outer:
 				// save to history and update the histryIndex
 				if currentInput != "" {
 					history = append(history, currentInput)
+					sessionHistory = append(sessionHistory, currentInput)
 					historyIndex = len(history)
 				}
 				break inner // break out of the reading loop to execute the command
@@ -221,10 +236,12 @@ func execInput(input string) error {
 		// if there is an argument change to that specific argument
 		return os.Chdir(arguments[0])
 	case "exit", "Exit":
-		err := saveHistory(utils.Write{
+		logger := &utils.Write{
 			Filename: filename,
-			History:  history,
-		})
+			History: history,
+		}
+
+		err := logger.WriteToFile()
 
 		if err != nil {
 			fmt.Printf("Error saving configuration history: %v", err)
@@ -286,7 +303,7 @@ func rePrintPrompt(path string) {
 	}
 }
 
-func saveHistory(writer utils.FileWriter) error {
+func saveHistory(writer utils.HistoryManager) error {
 	if writer == nil {
 		return fmt.Errorf("Cannot save history: Provided writer is nil")
 	}
