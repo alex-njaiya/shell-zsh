@@ -21,9 +21,10 @@ const (
 )
 
 var (
-	history      []string
-	historyIndex int
-	currentInput string
+	history         []string
+	historyIndex    int
+	currentInput    string
+	unexecutedInput string
 )
 
 func main() {
@@ -41,11 +42,11 @@ func main() {
 	// restore the terminal state when main exists or finishes reading
 	defer term.Restore(fd, oldState)
 
-	buf := make([]byte, 3)
 	// listen for every write from the keyboard
 outer:
 	for {
-		currentInput = ""
+		buf := make([]byte, 3)
+
 		path, err := getpath()
 
 		if err != nil {
@@ -73,7 +74,11 @@ outer:
 				if buf[2] == 'A' {
 					// up arrow pressed. Cycle to previous command history
 					if len(history) > 0 && historyIndex > 0 {
-						historyIndex--
+
+						if historyIndex == len(history) {
+							unexecutedInput = currentInput
+						}
+						historyIndex -= 1
 						currentInput = history[historyIndex]
 
 						// 1.\r moves cursor to start of line
@@ -83,7 +88,6 @@ outer:
 						// Reprint your prompt first so it doesn't disappear
 						rePrintPrompt(path)
 						fmt.Print(currentInput)
-
 					}
 					continue
 				}
@@ -99,11 +103,13 @@ outer:
 
 						if historyIndex == len(history) {
 							// if the hisrory index == end of the history replace with the current input text
-							currentInput = string(buf[:n])
+							// keep track of the current input sent so as to display after the end of the history
+							currentInput = unexecutedInput
 						} else {
 							currentInput = history[historyIndex]
-							fmt.Print(currentInput)
 						}
+						fmt.Print(currentInput)
+
 					}
 					continue
 				}
@@ -130,6 +136,8 @@ outer:
 
 					// move the cursor back, overwrite with space move cursor back
 					fmt.Print("\b \b")
+				} else {
+					// if the current input is empty do nothing
 				}
 				continue
 			}
@@ -139,8 +147,11 @@ outer:
 				break outer
 			}
 
-			currentInput += string(buf[:n])
-			fmt.Print(string(buf[:n]))
+			if buf[0] >= 32 && buf[0] != 127 {
+				currentInput += string(buf[:n])
+				fmt.Print(string(buf[:n]))
+				continue
+			}
 
 		}
 
@@ -151,6 +162,10 @@ outer:
 		if err = execInput(currentInput); err != nil {
 			fmt.Fprintln(os.Stderr, err)
 		}
+
+		// CLEAR: Reset variables here. Clear drafts only after a command finishes executing
+		currentInput = ""
+		unexecutedInput = ""
 
 		// re-enable raw mode immediately so the shell can read keys
 		oldState, err = term.MakeRaw(fd)
