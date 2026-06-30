@@ -1,11 +1,14 @@
 package main
 
 import (
-	"bufio"
 	"fmt"
+	"log"
 	"os"
 	"os/exec"
 	"strings"
+
+	"golang.org/x/term"
+	"text-based-shell/utils"
 )
 
 // preffix
@@ -18,10 +21,49 @@ const (
 	colorYellow string = colorPreffix + "33m"
 )
 
+var (
+	history         []string
+	sessionHistory  []string
+	historyIndex    int
+	currentInput    string
+	unexecutedInput string
+)
+
+var filename = "command-history.txt"
+
 func main() {
-	reader := bufio.NewReader(os.Stdin)
+	var err error
+	// load the history file into memory
+	logger := &utils.Write{
+		Filename: filename,
+		History:  history,
+	}
+
+	history, err = logger.ReadFromFile()
+
+	if err != nil {
+		fmt.Printf("Error loading history: %v\n", err)
+	}
+
+
+	// fd for the standard input
+	fd := int(os.Stdin.Fd())
+
+	// put the terminal into raw mode
+	oldState, err := term.MakeRaw(fd)
+
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	// restore the terminal state when main exists or finishes reading
+	defer term.Restore(fd, oldState)
+
 	// listen for every write from the keyboard
+outer:
 	for {
+		buf := make([]byte, 3)
+
 		path, err := getpath()
 
 		if err != nil {
@@ -32,25 +74,140 @@ func main() {
 		if path == "/" {
 			fmt.Printf("%s/ > %s", colorGreen, coloReset)
 		} else {
-			fmt.Printf("%s%s/ > %s", colorGreen, path, coloReset)
+			fmt.Printf("%s%s/ %s> %s", colorGreen, path, colorYellow, coloReset)
 		}
 
 		//read the keyboard input
-		input, err := reader.ReadString('\n')
+	inner:
+		for {
+			n, err := readInput(buf)
 
-		if err != nil {
+			if err != nil {
+				break outer
+			}
+
+			// check for specific escape sequences
+			if n == 3 && buf[0] == 27 && buf[1] == '[' {
+				if buf[2] == 'A' {
+					// up arrow pressed. Cycle to previous command history
+					if len(history) > 0 && historyIndex > 0 {
+
+						if historyIndex == len(history) {
+							unexecutedInput = currentInput
+						}
+						historyIndex -= 1
+						currentInput = history[historyIndex]
+
+						// 1.\r moves cursor to start of line
+						// 2. \033[K clears everything from cursor position to the end of the line
+						fmt.Print("\r\033[K")
+
+						// Reprint your prompt first so it doesn't disappear
+						rePrintPrompt(path)
+						fmt.Print(currentInput)
+					}
+					continue
+				}
+
+				if buf[2] == 'B' {
+					// Down arrow pressed. Cycle to the next command history
+					if historyIndex < len(history) {
+						historyIndex += 1
+						// clear any input when the down button is pressed
+						fmt.Print("\r\033[K")
+
+						rePrintPrompt(path)
+
+						if historyIndex == len(history) {
+							// if the hisrory index == end of the history replace with the current input text
+							// keep track of the current input sent so as to display after the end of the history
+							currentInput = unexecutedInput
+						} else {
+							currentInput = history[historyIndex]
+						}
+						fmt.Print(currentInput)
+
+					}
+					continue
+				}
+			}
+
+			//check for the enterkey to execute command.
+			// In raw mode enter sends a \r carriage return or newline
+			if buf[0] == '\r' || buf[0] == '\n' {
+				fmt.Print("\r\n")
+
+				// save to history and update the histryIndex
+				if currentInput != "" {
+					history = append(history, currentInput)
+					sessionHistory = append(sessionHistory, currentInput)
+					historyIndex = len(history)
+				}
+				break inner // break out of the reading loop to execute the command
+			}
+
+			if buf[0] == '\x7f' {
+				// delete the last char
+				if len(currentInput) > 0 {
+					// remove the last character from the internal string tracker
+					currentInput = currentInput[:len(currentInput)-1]
+
+					// move the cursor back, overwrite with space move cursor back
+					fmt.Print("\b \b")
+				} else {
+					// if the current input is empty do nothing
+				}
+				continue
+			}
+
+			if buf[0] == 3 {
+				fmt.Print("\r\n")
+				break outer
+			}
+
+			if buf[0] >= 32 && buf[0] != 127 {
+				currentInput += string(buf[:n])
+				fmt.Print(string(buf[:n]))
+				continue
+			}
+
+		}
+
+		// temprarily restore the terminal to normal mode
+		term.Restore(fd, oldState)
+
+		// handle the input execution
+		if err = execInput(currentInput); err != nil {
 			fmt.Fprintln(os.Stderr, err)
 		}
 
-		// handle the input execution
-		if err = execInput(input); err != nil {
-			fmt.Fprintln(os.Stderr, err)
+		// CLEAR: Reset variables here. Clear drafts only after a command finishes executing
+		currentInput = ""
+		unexecutedInput = ""
+
+		// re-enable raw mode immediately so the shell can read keys
+		oldState, err = term.MakeRaw(fd)
+
+		if err != nil {
+			log.Fatal(err)
 		}
 	}
 }
 
+func readInput(buf []byte) (input int, err error) {
+
+	n, err := os.Stdin.Read(buf)
+
+	if err != nil {
+		return 0, err
+	}
+
+	return n, nil
+}
+
 func execInput(input string) error {
 	// remove the new line characte at the end of the input
+	// TODO: We have to redo this because we are
 	args := strings.Fields(input)
 
 	if len(args) == 0 {
@@ -79,6 +236,20 @@ func execInput(input string) error {
 		// if there is an argument change to that specific argument
 		return os.Chdir(arguments[0])
 	case "exit", "Exit":
+		logger := &utils.Write{
+			Filename: filename,
+			History: history,
+		}
+
+		err := logger.WriteToFile()
+
+		if err != nil {
+			fmt.Printf("Error saving configuration history: %v", err)
+		} else {
+			fmt.Println("Command session saved successfully")
+		}
+
+		history = nil
 		os.Exit(0)
 	}
 
@@ -122,4 +293,24 @@ func formatHomeDirPath(target string) (path string, err error) {
 
 	return target, nil
 
+}
+
+func rePrintPrompt(path string) {
+	if path == "/" {
+		fmt.Printf("\r%s/ > %s", colorGreen, coloReset)
+	} else {
+		fmt.Printf("\r%s%s/ %s> %s", colorGreen, path, colorYellow, coloReset)
+	}
+}
+
+func saveHistory(writer utils.HistoryManager) error {
+	if writer == nil {
+		return fmt.Errorf("Cannot save history: Provided writer is nil")
+	}
+
+	if err := writer.WriteToFile(); err != nil {
+		return fmt.Errorf("Failed to save history: %v", err)
+	}
+
+	return nil
 }
