@@ -21,7 +21,7 @@ func (w Write) WriteToFile() error {
 		return nil
 	}
 
-	flags := os.O_WRONLY | os.O_CREATE | os.O_APPEND
+	flags := os.O_WRONLY | os.O_CREATE | os.O_TRUNC
 
 	// if empty create the file
 	file, err := os.OpenFile(w.Filename, flags, 0644)
