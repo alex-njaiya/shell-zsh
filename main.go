@@ -45,7 +45,6 @@ func main() {
 		fmt.Printf("Error loading history: %v\n", err)
 	}
 
-
 	// fd for the standard input
 	fd := int(os.Stdin.Fd())
 
@@ -165,6 +164,45 @@ outer:
 				break outer
 			}
 
+			// tab space
+			if buf[0] == '\t' {
+				if len(currentInput) == 0 {
+					continue
+				}
+				matches := utils.CompletionsFromPath(currentInput)
+
+				if len(matches) == 0 {
+					continue
+				}
+
+				if len(matches) == 1 {
+					currentInput = matches[0]
+
+					fmt.Print("\r\033[K")
+					rePrintPrompt(path)
+					fmt.Print(currentInput)
+				} else {
+					common := utils.LongestCommonPrefix(matches)
+
+					if len(common) > len(currentInput) {
+						currentInput = common
+
+						fmt.Print("\r\033[K")
+						rePrintPrompt(path)
+						fmt.Print(currentInput)
+					} else {
+						fmt.Print("\r\n")
+						for _, match := range matches {
+							fmt.Printf("%s ", match)
+						}
+						fmt.Print("\r\n")
+						rePrintPrompt(path)
+						fmt.Print(currentInput)
+					}
+				}
+				continue
+			}
+
 			if buf[0] >= 32 && buf[0] != 127 {
 				currentInput += string(buf[:n])
 				fmt.Print(string(buf[:n]))
@@ -238,7 +276,7 @@ func execInput(input string) error {
 	case "exit", "Exit":
 		logger := &utils.Write{
 			Filename: filename,
-			History: history,
+			History:  history,
 		}
 
 		err := logger.WriteToFile()
