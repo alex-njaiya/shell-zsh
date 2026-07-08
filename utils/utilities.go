@@ -5,7 +5,7 @@ import (
 	"strings"
 )
 
-func CompletionsFromPath(prefix string) []string {
+func CompletionsFromFiles(prefix string) []string {
 	var matches []string
 
 	currentDir, err := os.Getwd()
@@ -44,4 +44,34 @@ func LongestCommonPrefix(strs []string) string {
 	}
 
 	return prefix
+}
+
+func CompletionFromPath(prefix string) []string {
+	var matches []string
+
+	paths := os.Getenv("PATH")
+
+	// split the paths using the semicolon
+	dirs := strings.Split(paths, ":")
+
+	// iterate over the dirs and get into each directory
+	for _, dir := range dirs {
+		// for every directory check if the entry matches the prefix
+		// loop over each directory and match its name with the prefix
+		dirContents, err := os.ReadDir(dir)
+
+		if err != nil {
+			continue
+		}
+
+		// check each dirEntry content whether they match with the prefix
+		for _, entry := range dirContents {
+			if strings.HasPrefix(entry.Name(), prefix) {
+				//apend to the matches slice
+				matches = append(matches,  entry.Name())
+			}
+		}
+	}
+
+	return matches
 }
