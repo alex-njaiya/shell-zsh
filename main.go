@@ -5,19 +5,24 @@ import (
 	"log"
 	"os"
 	"os/exec"
+	"os/signal"
 	"strings"
+	"syscall"
+
+	// "syscall"
+
+	"text-based-shell/utils"
 
 	"golang.org/x/term"
-	"text-based-shell/utils"
 )
 
 // preffix
 const colorPreffix = "\033["
 const (
-	coloReset   string = colorPreffix + "0m"
-	colorGreen  string = colorPreffix + "32m"
-	colorBlue   string = colorPreffix + "34m"
-	colorCyan   string = colorPreffix + "36m"
+	coloReset  string = colorPreffix + "0m"
+	colorGreen string = colorPreffix + "32m"
+	// colorBlue   string = colorPreffix + "34m"
+	// colorCyan   string = colorPreffix + "36m"
 	colorYellow string = colorPreffix + "33m"
 )
 
@@ -30,6 +35,8 @@ var (
 )
 
 var filename = "command-history.txt"
+var foregroundCmd *exec.Cmd
+var path string
 
 func main() {
 	var err error
@@ -58,12 +65,30 @@ func main() {
 	// restore the terminal state when main exists or finishes reading
 	defer term.Restore(fd, oldState)
 
+	sig := make(chan os.Signal, 1)
+
+	signal.Notify(sig, os.Interrupt)
+
+	go func() {
+		for s := range sig {
+			if foregroundCmd != nil {
+				forePgid := foregroundCmd.Process.Pid
+
+				syscall.Kill(-forePgid, s.(syscall.Signal))
+			} else {
+				fmt.Print("\r\n")
+				rePrintPrompt(path)
+			}
+		}
+	}()
+
 	// listen for every write from the keyboard
+
 outer:
 	for {
-		buf := make([]byte, 3)
 
-		path, err := getpath()
+		buf := make([]byte, 3)
+		path, err = getpath()
 
 		if err != nil {
 			fmt.Printf("%s > %s", colorGreen, coloReset)
@@ -159,10 +184,10 @@ outer:
 				continue
 			}
 
-			if buf[0] == 3 {
-				fmt.Print("\r\n")
-				break outer
-			}
+			// if buf[0] == 3 {
+			// 	fmt.Print("\r\n")
+			// 	break outer
+			// }
 
 			// tab space -- autocomplete
 			if buf[0] == '\t' {
@@ -212,7 +237,7 @@ outer:
 					completions := utils.CompletionsFromFiles(tokens[len(tokens)-1])
 
 					if len(completions) == 0 {
-						fmt.Print("\007")
+						fmt.Print("\a")
 					}
 
 					if len(completions) == 1 {
@@ -343,8 +368,25 @@ func execInput(input string) error {
 	cmd.Stdout = os.Stdout
 	cmd.Stdin = os.Stdin
 
-	// execute the command and return the error
-	return cmd.Run()
+	cmd.SysProcAttr = &syscall.SysProcAttr{
+		Setpgid: true,
+	}
+
+	foregroundCmd = cmd
+
+	if err := cmd.Start(); err != nil {
+		fmt.Println("Error starting process:", err)
+		return err
+	}
+
+	// wait for the process to be started
+	if err := cmd.Wait(); err != nil {
+		if _, ok := err.(*exec.Error); !ok {
+			return err
+		}
+	}
+	foregroundCmd = nil
+	return nil
 }
 
 func getpath() (path string, err error) {
@@ -383,16 +425,4 @@ func rePrintPrompt(path string) {
 	} else {
 		fmt.Printf("\r%s%s/ %s> %s", colorGreen, path, colorYellow, coloReset)
 	}
-}
-
-func saveHistory(writer utils.HistoryManager) error {
-	if writer == nil {
-		return fmt.Errorf("Cannot save history: Provided writer is nil")
-	}
-
-	if err := writer.WriteToFile(); err != nil {
-		return fmt.Errorf("Failed to save history: %v", err)
-	}
-
-	return nil
 }
