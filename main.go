@@ -45,7 +45,6 @@ func main() {
 		fmt.Printf("Error loading history: %v\n", err)
 	}
 
-
 	// fd for the standard input
 	fd := int(os.Stdin.Fd())
 
@@ -165,6 +164,89 @@ outer:
 				break outer
 			}
 
+			// tab space -- autocomplete
+			if buf[0] == '\t' {
+				if len(currentInput) == 0 {
+					continue
+				}
+				// split the string into tokens
+				tokens := strings.Fields(currentInput)
+
+				if len(tokens) == 0 {
+					// no tokens -- no keyboard input
+					continue
+				}
+				// identify prefix and completion types
+
+				isCommand := len(tokens) == 1 && !strings.HasSuffix(currentInput, " ")
+
+				if isCommand {
+					matches := utils.CompletionFromPath(tokens[0])
+					//if the completion
+					if len(matches) == 0 {
+						// produce a beep sound
+						fmt.Print("\007")
+					}
+
+					if len(matches) == 1 {
+						currentInput = matches[0]
+						// redraw the line
+						fmt.Print("\r\033[K")
+						rePrintPrompt(path)
+						fmt.Print(currentInput)
+					}
+
+					if len(matches) > 1 {
+						longestCommonPrefix := utils.LongestCommonPrefix(matches)
+						currentInput = longestCommonPrefix
+						fmt.Print("\r\n")
+
+						fmt.Print(strings.Join(matches, " "))
+
+						fmt.Print("\r\n")
+						rePrintPrompt(path)
+						fmt.Print(currentInput)
+					}
+				} else {
+					// longest common prefix
+					completions := utils.CompletionsFromFiles(tokens[len(tokens)-1])
+
+					if len(completions) == 0 {
+						fmt.Print("\007")
+					}
+
+					if len(completions) == 1 {
+						base := strings.Join(tokens[:len(tokens)-1], " ")
+
+						if base != "" {
+							currentInput = base + " " + completions[0]
+						} else {
+							currentInput = completions[0]
+						}
+						fmt.Print("\r\033[K")
+						rePrintPrompt(path)
+						fmt.Print(currentInput)
+					}
+
+					if len(completions) > 1 {
+						longestCommonPrefix := utils.LongestCommonPrefix(completions)
+						base := strings.Join(tokens[:len(tokens)-1], " ")
+
+						if base != "" {
+							currentInput = base + " " + longestCommonPrefix
+						} else {
+							currentInput = longestCommonPrefix
+						}
+						fmt.Print("\r\n")
+						fmt.Print(strings.Join(completions, " "))
+						fmt.Print("\r\n")
+						rePrintPrompt(path)
+						fmt.Print(currentInput)
+					}
+				}
+
+			}
+
 			if buf[0] >= 32 && buf[0] != 127 {
 				currentInput += string(buf[:n])
 				fmt.Print(string(buf[:n]))
@@ -238,7 +320,7 @@ func execInput(input string) error {
 	case "exit", "Exit":
 		logger := &utils.Write{
 			Filename: filename,
-			History: history,
+			History:  history,
 		}
 
 		err := logger.WriteToFile()
