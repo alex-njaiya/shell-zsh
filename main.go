@@ -34,6 +34,15 @@ var (
 	unexecutedInput string
 )
 
+const (
+	backspace     = '\x7f'
+	escapeChar    = 27
+	escapeBracket = '['
+	maxBufSize    = 3
+)
+
+var cursor int
+
 var filename = "command-history.txt"
 var foregroundCmd *exec.Cmd
 var path string
@@ -76,7 +85,9 @@ func main() {
 
 				syscall.Kill(-forePgid, s.(syscall.Signal))
 			} else {
-				fmt.Print("\r\n")
+				fmt.Print("^C\r\n")
+				currentInput = ""
+				cursor = 0
 				rePrintPrompt(path)
 			}
 		}
@@ -111,7 +122,7 @@ outer:
 			}
 
 			// check for specific escape sequences
-			if n == 3 && buf[0] == 27 && buf[1] == '[' {
+			if n == maxBufSize && buf[0] == escapeChar && buf[1] == escapeBracket {
 				if buf[2] == 'A' {
 					// up arrow pressed. Cycle to previous command history
 					if len(history) > 0 && historyIndex > 0 {
@@ -150,9 +161,34 @@ outer:
 							currentInput = history[historyIndex]
 						}
 						fmt.Print(currentInput)
-
 					}
 					continue
+				}
+
+				// moving left with the cursor
+				if buf[2] == 'D' {
+					// check if the cursor it at zero
+					// if at zero block it from going further
+
+					if cursor > 0 {
+						// decrement the cursor index by 1
+						cursor--
+						// move the terminal cursor left
+						fmt.Print("\033[1D")
+					} else {
+						fmt.Print("\007")
+					}
+
+				}
+
+				if buf[2] == 'C' {
+					if cursor < len(currentInput) {
+						cursor++
+						// move the terminal cursor right
+						fmt.Print("\033[1C")
+					} else {
+						fmt.Print("\007")
+					}
 				}
 			}
 
@@ -166,28 +202,34 @@ outer:
 					history = append(history, currentInput)
 					sessionHistory = append(sessionHistory, currentInput)
 					historyIndex = len(history)
+					cursor = 0
 				}
 				break inner // break out of the reading loop to execute the command
 			}
 
 			if buf[0] == '\x7f' {
 				// delete the last char
-				if len(currentInput) > 0 {
+				if len(currentInput) > 0 && cursor > 0 {
 					// remove the last character from the internal string tracker
-					currentInput = currentInput[:len(currentInput)-1]
+					currentInput = currentInput[:cursor-1] + currentInput[cursor:]
+					cursor--
+					// redraw the line
+					fmt.Print("\r\033[K")
+					rePrintPrompt(path)
+					fmt.Print(currentInput)
 
-					// move the cursor back, overwrite with space move cursor back
-					fmt.Print("\b \b")
+					// move the terminal cursor back to the correct position
+					correctCursorPos := len(currentInput) - cursor
+
+					if correctCursorPos > 0 {
+						fmt.Printf("\033[%dD", correctCursorPos)
+
+					}
 				} else {
 					// if the current input is empty do nothing
 				}
 				continue
 			}
-
-			// if buf[0] == 3 {
-			// 	fmt.Print("\r\n")
-			// 	break outer
-			// }
 
 			// tab space -- autocomplete
 			if buf[0] == '\t' {
@@ -273,23 +315,34 @@ outer:
 			}
 
 			if buf[0] >= 32 && buf[0] != 127 {
-				currentInput += string(buf[:n])
-				fmt.Print(string(buf[:n]))
+				currentInput = currentInput[:cursor] + string(buf[:n]) + currentInput[cursor:]
+				cursor++
+				fmt.Print("\r\033[K")
+				rePrintPrompt(path)
+				fmt.Print(currentInput)
+				// move the terminal back to the correct position
+				correctCursorPos := len(currentInput) - cursor
+
+				if correctCursorPos > 0 {
+					fmt.Printf("\033[%dD", correctCursorPos)
+
+				}
 				continue
 			}
 
 		}
 
-		// temprarily restore the terminal to normal mode
+		// temporarily restore the terminal to normal mode
 		term.Restore(fd, oldState)
 
 		// handle the input execution
 		if err = execInput(currentInput); err != nil {
-			fmt.Fprintln(os.Stderr, err)
+			fmt.Fprintf(os.Stderr, "\r%s\r\n", err)
 		}
 
 		// CLEAR: Reset variables here. Clear drafts only after a command finishes executing
 		currentInput = ""
+		cursor = 0
 		unexecutedInput = ""
 
 		// re-enable raw mode immediately so the shell can read keys
@@ -375,13 +428,12 @@ func execInput(input string) error {
 	foregroundCmd = cmd
 
 	if err := cmd.Start(); err != nil {
-		fmt.Println("Error starting process:", err)
 		return err
 	}
 
 	// wait for the process to be started
 	if err := cmd.Wait(); err != nil {
-		if _, ok := err.(*exec.Error); !ok {
+		if _, ok := err.(*exec.ExitError); !ok {
 			return err
 		}
 	}
