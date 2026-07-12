@@ -48,7 +48,23 @@ var foregroundCmd *exec.Cmd
 var path string
 
 func main() {
+	inputChan := make(chan []byte)
+	interruptChan := make(chan struct{}, 1)
 	var err error
+
+	go func() {
+		for {
+			buf := make([]byte, 3)
+			n, err := os.Stdin.Read(buf)
+
+			if err != nil {
+				close(inputChan)
+				return
+			}
+			inputChan <- buf[:n]
+		}
+	}()
+
 	// load the history file into memory
 	logger := &utils.Write{
 		Filename: filename,
@@ -88,7 +104,13 @@ func main() {
 				fmt.Print("^C\r\n")
 				currentInput = ""
 				cursor = 0
-				rePrintPrompt(path)
+				select {
+				case interruptChan <- struct{}{}:
+				default:
+				}
+
+				os.Stdin.Write([]byte{0})
+
 			}
 		}
 	}()
@@ -97,8 +119,6 @@ func main() {
 
 outer:
 	for {
-
-		buf := make([]byte, 3)
 		path, err = getpath()
 
 		if err != nil {
@@ -113,12 +133,30 @@ outer:
 		}
 
 		//read the keyboard input
+		// input channel
 	inner:
 		for {
-			n, err := readInput(buf)
+			var buf []byte
+			var n int
 
-			if err != nil {
-				break outer
+			select {
+			case b, ok := <-inputChan:
+				if !ok {
+					break outer
+				}
+
+				select {
+				case <-interruptChan:
+					break inner
+				default:
+				}
+
+				buf = b
+				n = len(b)
+			case <-interruptChan:
+				currentInput = ""
+				cursor = 0
+				break inner
 			}
 
 			// check for specific escape sequences
@@ -329,7 +367,6 @@ outer:
 				}
 				continue
 			}
-
 		}
 
 		// temporarily restore the terminal to normal mode
