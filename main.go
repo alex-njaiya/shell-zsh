@@ -5,19 +5,24 @@ import (
 	"log"
 	"os"
 	"os/exec"
+	"os/signal"
 	"strings"
+	"syscall"
+
+	// "syscall"
+
+	"text-based-shell/utils"
 
 	"golang.org/x/term"
-	"text-based-shell/utils"
 )
 
 // preffix
 const colorPreffix = "\033["
 const (
-	coloReset   string = colorPreffix + "0m"
-	colorGreen  string = colorPreffix + "32m"
-	colorBlue   string = colorPreffix + "34m"
-	colorCyan   string = colorPreffix + "36m"
+	coloReset  string = colorPreffix + "0m"
+	colorGreen string = colorPreffix + "32m"
+	// colorBlue   string = colorPreffix + "34m"
+	// colorCyan   string = colorPreffix + "36m"
 	colorYellow string = colorPreffix + "33m"
 )
 
@@ -29,10 +34,41 @@ var (
 	unexecutedInput string
 )
 
+const (
+	backspace     = '\x7f'
+	escapeChar    = 27
+	escapeBracket = '['
+	maxBufSize    = 3
+)
+
+var cursor int
+
 var filename = "command-history.txt"
+var foregroundCmd *exec.Cmd
+var path string
 
 func main() {
+	// homePth, _ := utils.ConfigPath()
+	// fmt.Print(homePth)
+
+
+	inputChan := make(chan []byte)
+	interruptChan := make(chan struct{}, 1)
 	var err error
+
+	go func() {
+		for {
+			buf := make([]byte, 3)
+			n, err := os.Stdin.Read(buf)
+
+			if err != nil {
+				close(inputChan)
+				return
+			}
+			inputChan <- buf[:n]
+		}
+	}()
+
 	// load the history file into memory
 	logger := &utils.Write{
 		Filename: filename,
@@ -58,12 +94,36 @@ func main() {
 	// restore the terminal state when main exists or finishes reading
 	defer term.Restore(fd, oldState)
 
+	sig := make(chan os.Signal, 1)
+
+	signal.Notify(sig, os.Interrupt)
+
+	go func() {
+		for s := range sig {
+			if foregroundCmd != nil {
+				forePgid := foregroundCmd.Process.Pid
+
+				syscall.Kill(-forePgid, s.(syscall.Signal))
+			} else {
+				fmt.Print("^C\r\n")
+				currentInput = ""
+				cursor = 0
+				select {
+				case interruptChan <- struct{}{}:
+				default:
+				}
+
+				os.Stdin.Write([]byte{0})
+
+			}
+		}
+	}()
+
 	// listen for every write from the keyboard
+
 outer:
 	for {
-		buf := make([]byte, 3)
-
-		path, err := getpath()
+		path, err = getpath()
 
 		if err != nil {
 			fmt.Printf("%s > %s", colorGreen, coloReset)
@@ -77,16 +137,34 @@ outer:
 		}
 
 		//read the keyboard input
+		// input channel
 	inner:
 		for {
-			n, err := readInput(buf)
+			var buf []byte
+			var n int
 
-			if err != nil {
-				break outer
+			select {
+			case b, ok := <-inputChan:
+				if !ok {
+					break outer
+				}
+
+				select {
+				case <-interruptChan:
+					break inner
+				default:
+				}
+
+				buf = b
+				n = len(b)
+			case <-interruptChan:
+				currentInput = ""
+				cursor = 0
+				break inner
 			}
 
 			// check for specific escape sequences
-			if n == 3 && buf[0] == 27 && buf[1] == '[' {
+			if n == maxBufSize && buf[0] == escapeChar && buf[1] == escapeBracket {
 				if buf[2] == 'A' {
 					// up arrow pressed. Cycle to previous command history
 					if len(history) > 0 && historyIndex > 0 {
@@ -125,9 +203,34 @@ outer:
 							currentInput = history[historyIndex]
 						}
 						fmt.Print(currentInput)
-
 					}
 					continue
+				}
+
+				// moving left with the cursor
+				if buf[2] == 'D' {
+					// check if the cursor it at zero
+					// if at zero block it from going further
+
+					if cursor > 0 {
+						// decrement the cursor index by 1
+						cursor--
+						// move the terminal cursor left
+						fmt.Print("\033[1D")
+					} else {
+						fmt.Print("\007")
+					}
+
+				}
+
+				if buf[2] == 'C' {
+					if cursor < len(currentInput) {
+						cursor++
+						// move the terminal cursor right
+						fmt.Print("\033[1C")
+					} else {
+						fmt.Print("\007")
+					}
 				}
 			}
 
@@ -141,27 +244,33 @@ outer:
 					history = append(history, currentInput)
 					sessionHistory = append(sessionHistory, currentInput)
 					historyIndex = len(history)
+					cursor = 0
 				}
 				break inner // break out of the reading loop to execute the command
 			}
 
 			if buf[0] == '\x7f' {
 				// delete the last char
-				if len(currentInput) > 0 {
+				if len(currentInput) > 0 && cursor > 0 {
 					// remove the last character from the internal string tracker
-					currentInput = currentInput[:len(currentInput)-1]
+					currentInput = currentInput[:cursor-1] + currentInput[cursor:]
+					cursor--
+					// redraw the line
+					fmt.Print("\r\033[K")
+					rePrintPrompt(path)
+					fmt.Print(currentInput)
 
-					// move the cursor back, overwrite with space move cursor back
-					fmt.Print("\b \b")
+					// move the terminal cursor back to the correct position
+					correctCursorPos := len(currentInput) - cursor
+
+					if correctCursorPos > 0 {
+						fmt.Printf("\033[%dD", correctCursorPos)
+
+					}
 				} else {
 					// if the current input is empty do nothing
 				}
 				continue
-			}
-
-			if buf[0] == 3 {
-				fmt.Print("\r\n")
-				break outer
 			}
 
 			// tab space -- autocomplete
@@ -212,7 +321,7 @@ outer:
 					completions := utils.CompletionsFromFiles(tokens[len(tokens)-1])
 
 					if len(completions) == 0 {
-						fmt.Print("\007")
+						fmt.Print("\a")
 					}
 
 					if len(completions) == 1 {
@@ -248,23 +357,33 @@ outer:
 			}
 
 			if buf[0] >= 32 && buf[0] != 127 {
-				currentInput += string(buf[:n])
-				fmt.Print(string(buf[:n]))
+				currentInput = currentInput[:cursor] + string(buf[:n]) + currentInput[cursor:]
+				cursor++
+				fmt.Print("\r\033[K")
+				rePrintPrompt(path)
+				fmt.Print(currentInput)
+				// move the terminal back to the correct position
+				correctCursorPos := len(currentInput) - cursor
+
+				if correctCursorPos > 0 {
+					fmt.Printf("\033[%dD", correctCursorPos)
+
+				}
 				continue
 			}
-
 		}
 
-		// temprarily restore the terminal to normal mode
+		// temporarily restore the terminal to normal mode
 		term.Restore(fd, oldState)
 
 		// handle the input execution
 		if err = execInput(currentInput); err != nil {
-			fmt.Fprintln(os.Stderr, err)
+			fmt.Fprintf(os.Stderr, "\r%s\r\n", err)
 		}
 
 		// CLEAR: Reset variables here. Clear drafts only after a command finishes executing
 		currentInput = ""
+		cursor = 0
 		unexecutedInput = ""
 
 		// re-enable raw mode immediately so the shell can read keys
@@ -343,8 +462,24 @@ func execInput(input string) error {
 	cmd.Stdout = os.Stdout
 	cmd.Stdin = os.Stdin
 
-	// execute the command and return the error
-	return cmd.Run()
+	cmd.SysProcAttr = &syscall.SysProcAttr{
+		Setpgid: true,
+	}
+
+	foregroundCmd = cmd
+
+	if err := cmd.Start(); err != nil {
+		return err
+	}
+
+	// wait for the process to be started
+	if err := cmd.Wait(); err != nil {
+		if _, ok := err.(*exec.ExitError); !ok {
+			return err
+		}
+	}
+	foregroundCmd = nil
+	return nil
 }
 
 func getpath() (path string, err error) {
@@ -383,16 +518,4 @@ func rePrintPrompt(path string) {
 	} else {
 		fmt.Printf("\r%s%s/ %s> %s", colorGreen, path, colorYellow, coloReset)
 	}
-}
-
-func saveHistory(writer utils.HistoryManager) error {
-	if writer == nil {
-		return fmt.Errorf("Cannot save history: Provided writer is nil")
-	}
-
-	if err := writer.WriteToFile(); err != nil {
-		return fmt.Errorf("Failed to save history: %v", err)
-	}
-
-	return nil
 }
