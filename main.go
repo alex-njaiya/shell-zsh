@@ -21,7 +21,7 @@ const colorPreffix = "\033["
 const (
 	coloReset  string = colorPreffix + "0m"
 	colorGreen string = colorPreffix + "32m"
-	// colorBlue   string = colorPreffix + "34m"
+	colorBlue   string = colorPreffix + "34m"
 	// colorCyan   string = colorPreffix + "36m"
 	colorYellow string = colorPreffix + "33m"
 )
@@ -53,7 +53,7 @@ func main() {
 
 
 	// run setup 
-	utils.RunSetup(fd)
+	cfg := utils.RunSetup(fd)
 
 
 
@@ -125,7 +125,12 @@ func main() {
 
 outer:
 	for {
-		path, err = getpath()
+		path, err := getpath()
+
+		// append the username and host
+		userspace := utils.AppendUsername(cfg)
+
+		
 
 		if err != nil {
 			fmt.Printf("%s%s$", colorGreen, coloReset)
@@ -133,9 +138,9 @@ outer:
 		}
 
 		if path == "/" {
-			fmt.Printf("%s%s$ %s", colorGreen, colorYellow, coloReset)
+			fmt.Printf("%s%s%s%s$ %s", colorGreen, userspace, colorBlue, colorYellow, coloReset)
 		} else {
-			fmt.Printf("%s%s%s$ %s", colorGreen, path, colorYellow, coloReset)
+			fmt.Printf("%s%s%s%s%s$ %s", colorGreen, userspace, colorBlue, path, colorYellow, coloReset)
 		}
 
 		//read the keyboard input
@@ -182,7 +187,7 @@ outer:
 						fmt.Print("\r\033[K")
 
 						// Reprint your prompt first so it doesn't disappear
-						rePrintPrompt(path)
+						rePrintPrompt(path, userspace)
 						fmt.Print(currentInput)
 					}
 					continue
@@ -195,7 +200,7 @@ outer:
 						// clear any input when the down button is pressed
 						fmt.Print("\r\033[K")
 
-						rePrintPrompt(path)
+						rePrintPrompt(path, userspace)
 
 						if historyIndex == len(history) {
 							// if the hisrory index == end of the history replace with the current input text
@@ -259,7 +264,7 @@ outer:
 					cursor--
 					// redraw the line
 					fmt.Print("\r\033[K")
-					rePrintPrompt(path)
+					rePrintPrompt(path, userspace)
 					fmt.Print(currentInput)
 
 					// move the terminal cursor back to the correct position
@@ -303,7 +308,7 @@ outer:
 						currentInput = matches[0]
 						// redraw the line
 						fmt.Print("\r\033[K")
-						rePrintPrompt(path)
+						rePrintPrompt(path, userspace)
 						fmt.Print(currentInput)
 					}
 
@@ -315,7 +320,7 @@ outer:
 						fmt.Print(strings.Join(matches, " "))
 
 						fmt.Print("\r\n")
-						rePrintPrompt(path)
+						rePrintPrompt(path, userspace)
 						fmt.Print(currentInput)
 					}
 				} else {
@@ -335,7 +340,7 @@ outer:
 							currentInput = completions[0]
 						}
 						fmt.Print("\r\033[K")
-						rePrintPrompt(path)
+						rePrintPrompt(path, userspace)
 						fmt.Print(currentInput)
 					}
 
@@ -351,7 +356,7 @@ outer:
 						fmt.Print("\r\n")
 						fmt.Print(strings.Join(completions, " "))
 						fmt.Print("\r\n")
-						rePrintPrompt(path)
+						rePrintPrompt(path, userspace)
 						fmt.Print(currentInput)
 					}
 				}
@@ -362,7 +367,7 @@ outer:
 				currentInput = currentInput[:cursor] + string(buf[:n]) + currentInput[cursor:]
 				cursor++
 				fmt.Print("\r\033[K")
-				rePrintPrompt(path)
+				rePrintPrompt(path, userspace)
 				fmt.Print(currentInput)
 				// move the terminal back to the correct position
 				correctCursorPos := len(currentInput) - cursor
@@ -493,6 +498,8 @@ func getpath() (path string, err error) {
 
 	// format the homeDir path to use a tilde instead of the entire path
 	path, err = formatHomeDirPath(cdir)
+
+	// append the username and host on the path
 	return path, err
 }
 
@@ -514,10 +521,10 @@ func formatHomeDirPath(target string) (path string, err error) {
 
 }
 
-func rePrintPrompt(path string) {
+func rePrintPrompt(path string, userspace string) {
 	if path == "/" {
-		fmt.Printf("\r%s%s$ %s", colorGreen, colorYellow, coloReset)
+		fmt.Printf("\r%s%s%s%s$ %s", colorGreen, userspace, colorBlue, colorYellow, coloReset)
 	} else {
-		fmt.Printf("\r%s%s%s$ %s", colorGreen, path, colorYellow, coloReset)
+		fmt.Printf("\r%s%s%s%s%s$ %s", colorGreen, userspace, colorBlue, path, colorYellow, coloReset)
 	}
 }

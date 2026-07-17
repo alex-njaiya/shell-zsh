@@ -1,6 +1,7 @@
 package utils
 
 import (
+	"fmt"
 	"os"
 	"strings"
 )
@@ -74,4 +75,22 @@ func CompletionFromPath(prefix string) []string {
 	}
 
 	return matches
+}
+
+
+func AppendUsername(cfg Config) string {
+	//get the username and append it to the hostmachine
+	username := cfg.username
+
+	// get the host of the system using the shell
+	host, err := os.Hostname()
+
+	if err != nil {
+		fmt.Printf("Error retrieving host: %s\n", err)
+		return ""
+	}
+
+	// append the host with the username
+	userspace := username + "@" + host + ":"
+	return userspace
 }

@@ -15,6 +15,6 @@
 # FIRST TIME SETUP LOGIC TASKS
 1. Implement session/remember the user everytime they start the shell to use it instead of prompting the user 
     a username and password evertime they exit and restart the shell
-2. Append the username + host then the path on the path: Example: username@host:~$
+2. Append the username + host then the path on the full path: Example: username@host:~$
 3. Implement max retries for user wrong password inputs
 4. For special commands such as deleting a directory and its contents prompt the user for a password

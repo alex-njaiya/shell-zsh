@@ -208,10 +208,3 @@ func ConfigPath() (string, error) {
 
 	return targetDir, nil
 }
-
-
-// func InitSetup(fd int){
-// 	cfg := RunSetup(fd)
-
-// 	// append the username with host and the path  username@desktop-1454y:~/path
-// }
