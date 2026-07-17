@@ -48,10 +48,6 @@ var foregroundCmd *exec.Cmd
 var path string
 
 func main() {
-	// homePth, _ := utils.ConfigPath()
-	// fmt.Print(homePth)
-
-
 	inputChan := make(chan []byte)
 	interruptChan := make(chan struct{}, 1)
 	var err error
@@ -83,6 +79,8 @@ func main() {
 
 	// fd for the standard input
 	fd := int(os.Stdin.Fd())
+
+	utils.RunSetup(fd)
 
 	// put the terminal into raw mode
 	oldState, err := term.MakeRaw(fd)
