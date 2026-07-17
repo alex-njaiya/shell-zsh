@@ -48,6 +48,10 @@ var foregroundCmd *exec.Cmd
 var path string
 
 func main() {
+	// homePth, _ := utils.ConfigPath()
+	// fmt.Print(homePth)
+
+
 	inputChan := make(chan []byte)
 	interruptChan := make(chan struct{}, 1)
 	var err error
