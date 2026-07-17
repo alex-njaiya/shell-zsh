@@ -48,6 +48,15 @@ var foregroundCmd *exec.Cmd
 var path string
 
 func main() {
+	// fd for the standard input
+	fd := int(os.Stdin.Fd())
+
+
+	// run setup 
+	utils.RunSetup(fd)
+
+
+
 	inputChan := make(chan []byte)
 	interruptChan := make(chan struct{}, 1)
 	var err error
@@ -76,11 +85,6 @@ func main() {
 	if err != nil {
 		fmt.Printf("Error loading history: %v\n", err)
 	}
-
-	// fd for the standard input
-	fd := int(os.Stdin.Fd())
-
-	utils.RunSetup(fd)
 
 	// put the terminal into raw mode
 	oldState, err := term.MakeRaw(fd)
@@ -124,14 +128,14 @@ outer:
 		path, err = getpath()
 
 		if err != nil {
-			fmt.Printf("%s > %s", colorGreen, coloReset)
+			fmt.Printf("%s%s$", colorGreen, coloReset)
 			continue
 		}
 
 		if path == "/" {
-			fmt.Printf("%s/ > %s", colorGreen, coloReset)
+			fmt.Printf("%s%s$ %s", colorGreen, colorYellow, coloReset)
 		} else {
-			fmt.Printf("%s%s/ %s> %s", colorGreen, path, colorYellow, coloReset)
+			fmt.Printf("%s%s%s$ %s", colorGreen, path, colorYellow, coloReset)
 		}
 
 		//read the keyboard input
@@ -484,7 +488,7 @@ func getpath() (path string, err error) {
 	cdir, err := os.Getwd()
 
 	if err != nil {
-		return "> ", err
+		return "$ ", err
 	}
 
 	// format the homeDir path to use a tilde instead of the entire path
@@ -512,8 +516,8 @@ func formatHomeDirPath(target string) (path string, err error) {
 
 func rePrintPrompt(path string) {
 	if path == "/" {
-		fmt.Printf("\r%s/ > %s", colorGreen, coloReset)
+		fmt.Printf("\r%s%s$ %s", colorGreen, colorYellow, coloReset)
 	} else {
-		fmt.Printf("\r%s%s/ %s> %s", colorGreen, path, colorYellow, coloReset)
+		fmt.Printf("\r%s%s%s$ %s", colorGreen, path, colorYellow, coloReset)
 	}
 }
