@@ -12,7 +12,7 @@ import (
 )
 
 type Config struct {
-	username string
+	Username string
 	Password string
 }
 
@@ -45,19 +45,18 @@ func LoadConfig() (Config, error) {
 		}
 
 		parts := strings.SplitN(line, "=", 2)
-		fmt.Print(parts)
 
 		if len(parts) == 2 {
 			key := strings.TrimSpace(parts[0])
 			value := strings.TrimSpace(parts[1])
 
-			fmt.Printf("DEBUG -- Key: %s | value: %s", key, value)
+			// fmt.Printf("DEBUG -- Key: %s | value: %s", key, value)
 
 			// assign to the right field on the struct based on the key
 
 			switch key {
 			case "username":
-				cfg.username = value
+				cfg.Username = value
 			case "password":
 				cfg.Password = value
 			}
@@ -79,7 +78,7 @@ func SaveConfig(cfg Config) error {
 	configFilePath := filepath.Join(dirPath, "settings.conf")
 
 	// format the config username=value\npassword=value\n
-	formattedConfig := fmt.Sprintf("username=%s\npassword=%s\n", cfg.username, cfg.Password)
+	formattedConfig := fmt.Sprintf("username=%s\npassword=%s\n", cfg.Username, cfg.Password)
 
 	// write the config to file using os.WriteFile
 	// 0644 -- read and write permission for owner
@@ -87,7 +86,6 @@ func SaveConfig(cfg Config) error {
 		return fmt.Errorf("Error writing the config file to disk: %w", err)
 	}
 
-	fmt.Println("Successfully saved configuration to disk")
 	return nil
 }
 
@@ -98,7 +96,9 @@ func SetUpExists() bool {
 		return false
 	}
 
-	_, err = os.Stat(path)
+	fullpath := filepath.Join(path, "settings.conf")
+
+	_, err = os.Stat(fullpath)
 
 	if err != nil {
 		return false
@@ -129,7 +129,6 @@ to get started in using the gosh shell
 
 	fmt.Print("\r\033[K")
 	fmt.Print("username: ")
-
 	// capture the username
 	input, err := reader.ReadString('\n')
 
@@ -140,47 +139,55 @@ to get started in using the gosh shell
 
 	// trim the the new line character at the end
 	username := strings.TrimSpace(input)
+	for {
+		// Prompt for the user password using term.ReadPassword
+		fmt.Print("password: ")
+		passwordBytes, err := term.ReadPassword(fd)
 
-	// Prompt for the user password using term.ReadPassword
-	fmt.Print("password: ")
-	passwordBytes, err := term.ReadPassword(fd)
+		if err != nil {
+			fmt.Printf("Error reading user password input: %s\n", err)
+			return cfg
+		}
+		fmt.Println() // move cursor to a new line after hidden inputs
 
-	if err != nil {
-		fmt.Printf("Error reading user password input: %s\n", err)
-		return cfg
-	}
-	fmt.Println()  // move cursor to a new line after hidden inputs
+		// Prompt to confirm the password and verify it matches the first
+		fmt.Print("confirm password: ")
+		confirmPasswordBytes, err := term.ReadPassword(fd)
 
-	// Prompt to confirm the password and verify it matches the first
-	fmt.Print("confirm password: ")
-	confirmPasswordBytes, err := term.ReadPassword(fd)
+		if err != nil {
+			fmt.Printf("Error reading user confirm Password Input: %s\n", err)
+			return cfg
+		}
 
-	if err != nil {
-		fmt.Printf("Error reading user confirm Password Input: %s\n", err)
-		return cfg
-	}
-	// verify the password. Compare raw byte slices before hashing
-	if string(passwordBytes) != string(confirmPasswordBytes) {
-		fmt.Println("Passwords do not match. Please restart setup")
-		return cfg
-	}
+		fmt.Println()
+		// verify the password. Compare raw byte slices before hashing
+		if string(passwordBytes) != string(confirmPasswordBytes) {
+			fmt.Println("\nPasswords do not match")
+			fmt.Println("Please re-enter your password and make sure they match with confirm password")
 
-	hashedPassword, err := bcrypt.GenerateFromPassword(confirmPasswordBytes ,bcrypt.DefaultCost)
+			// If passwords do not match restart the user input loop
+			// give an error message and restart
+			continue
+		}
+		hashedPassword, err := bcrypt.GenerateFromPassword(confirmPasswordBytes, bcrypt.DefaultCost)
 
-	if err != nil {
-		fmt.Printf("Error hashing password: %s\n", err)
-		return cfg
-	}
+		if err != nil {
+			fmt.Printf("Error hashing password: %s\n", err)
+			return cfg
+		}
 
-	// build and populate the config struct
-	cfg.username = username
-	cfg.Password = string(hashedPassword)
+		// build and populate the config struct
+		cfg.Username = username
+		cfg.Password = string(hashedPassword)
 
-	// save the config file onto disk
-	err = SaveConfig(cfg)
+		// save the config file onto disk
+		err = SaveConfig(cfg)
 
-	if err != nil {
-		fmt.Printf("Error saving the config file into disk: %s\n", err)
+		if err != nil {
+			fmt.Printf("Error saving the config file into disk: %s\n", err)
+		}
+
+		break
 	}
 
 	return cfg
@@ -208,3 +215,5 @@ func ConfigPath() (string, error) {
 
 	return targetDir, nil
 }
+
+// IMPLEMENTING SESSIONS OR MAKING THE COMPUTER TERMINAL REMEMEBER THE USER WHEN THEY EXIT AND RESTART THE SHELL EVEN AFTER DAYS OR MONTHS OF USE

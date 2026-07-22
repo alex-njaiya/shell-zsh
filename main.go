@@ -21,7 +21,7 @@ const colorPreffix = "\033["
 const (
 	coloReset  string = colorPreffix + "0m"
 	colorGreen string = colorPreffix + "32m"
-	colorBlue   string = colorPreffix + "34m"
+	colorBlue  string = colorPreffix + "34m"
 	// colorCyan   string = colorPreffix + "36m"
 	colorYellow string = colorPreffix + "33m"
 )
@@ -46,20 +46,30 @@ var cursor int
 var filename = "command-history.txt"
 var foregroundCmd *exec.Cmd
 var path string
+var config utils.Config
 
 func main() {
 	// fd for the standard input
 	fd := int(os.Stdin.Fd())
+	var err error
 
+	if utils.SetUpExists() {
+		config, err = utils.LoadConfig()
 
-	// run setup 
-	cfg := utils.RunSetup(fd)
+		if err != nil {
+			fmt.Printf("Failed to load config, running setup: %s", err)
+			config = utils.RunSetup(fd)
+		}
 
+		fmt.Println("Welcome back, " + config.Username + "!")
+	} else {
+		config = utils.RunSetup(fd)
+		fmt.Printf("\nSetup complete. Welcome, %s\n", config.Username)
 
+	}
 
 	inputChan := make(chan []byte)
 	interruptChan := make(chan struct{}, 1)
-	var err error
 
 	go func() {
 		for {
@@ -83,7 +93,7 @@ func main() {
 	history, err = logger.ReadFromFile()
 
 	if err != nil {
-		fmt.Printf("Error loading history: %v\n", err)
+		
 	}
 
 	// put the terminal into raw mode
@@ -128,9 +138,7 @@ outer:
 		path, err := getpath()
 
 		// append the username and host
-		userspace := utils.AppendUsername(cfg)
-
-		
+		userspace := utils.AppendUsername(config)
 
 		if err != nil {
 			fmt.Printf("%s%s$", colorGreen, coloReset)
@@ -443,6 +451,8 @@ func execInput(input string) error {
 
 		// if there is an argument change to that specific argument
 		return os.Chdir(arguments[0])
+	case "whoami":
+		fmt.Printf("%s", config.Username)
 	case "exit", "Exit":
 		logger := &utils.Write{
 			Filename: filename,

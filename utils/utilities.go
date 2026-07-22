@@ -80,7 +80,7 @@ func CompletionFromPath(prefix string) []string {
 
 func AppendUsername(cfg Config) string {
 	//get the username and append it to the hostmachine
-	username := cfg.username
+	username := cfg.Username
 
 	// get the host of the system using the shell
 	host, err := os.Hostname()
