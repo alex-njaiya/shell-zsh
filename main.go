@@ -423,11 +423,25 @@ func readInput(buf []byte) (input int, err error) {
 
 func execInput(input string) error {
 	// remove the new line characte at the end of the input
-	// TODO: We have to redo this because we are
 	args := strings.Fields(input)
 
 	if len(args) == 0 {
 		return nil
+	}
+
+	for i, token := range args {
+		if strings.HasPrefix(token, "$") {
+			// extract the token alone without the other parts
+			val := token[1:]
+
+			env, ok := os.LookupEnv(val)
+
+			if !ok {
+				args[i] = " "
+			}
+
+			args[i] = env
+		}
 	}
 
 	command := args[0]
