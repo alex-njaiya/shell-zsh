@@ -93,7 +93,7 @@ func main() {
 	history, err = logger.ReadFromFile()
 
 	if err != nil {
-		
+		// We dont want to display an error because it will show in the input prompt
 	}
 
 	// put the terminal into raw mode

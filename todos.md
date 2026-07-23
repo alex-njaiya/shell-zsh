@@ -18,3 +18,9 @@
 2. Append the username + host then the path on the full path: Example: username@host:~$
 3. Implement max retries for user wrong password inputs
 4. For special commands such as deleting a directory and its contents prompt the user for a password
+
+# FEATURES TO BUILD
+1. Environment variables
+2. I/O redirection
+3. Pipes
+4. SuperUser commands
