@@ -8,33 +8,43 @@ import (
 func ExpandVariables(args []string) []string {
 	for i, token := range args {
 		if strings.HasPrefix(token, "$") {
-			val := token[1:]
-
 			if len(token) > 1 {
-				// strip everything that is not a letter, digit or underscore
-				extract := func(r rune) bool {
-					return r == '/'
+
+				val := token[1:]
+				delimeter := "/"
+				// if the token is just a pure variable reference
+				parts := strings.SplitN(val, delimeter, 2)
+				varName := parts[0]
+
+				if len(parts) == 2 {
+					suffix := parts[1]
+
+					// The token is a variable with path prefix
+					// Reconstruct the token with the "/"
+					env, found := os.LookupEnv(varName)
+
+					if !found { // Not found
+						args[i] = "/" + suffix
+					}
+
+					// If the environment variable has been found
+
+					// reconstruct the env with the entire path
+					args[i] = env + "/" + suffix
 				}
 
-				parts := strings.FieldsFunc(val, extract)
+				if len(parts) == 1 { // Meaning it is a pure variable with no path reference
+					env, found := os.LookupEnv(varName)
 
-				env, ok := os.LookupEnv(parts[0])
+					if !found {
+						args[i] = ""
+					}
 
-				if !ok {
-					args[i] = " "
-				}
-
-				// recontruct the token if it had a suffix
-				if len(parts) == 1 {
-					// no need to reconstruct
 					args[i] = env
-				} else {
-					// there are more than 2 parts lets add the suffix
-					result := strings.Join(parts[1:], "/")
-					args[i] = result
 				}
 
 			}
+
 		}
 	}
 
