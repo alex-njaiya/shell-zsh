@@ -429,20 +429,7 @@ func execInput(input string) error {
 		return nil
 	}
 
-	for i, token := range args {
-		if strings.HasPrefix(token, "$") {
-			// extract the token alone without the other parts
-			val := token[1:]
-
-			env, ok := os.LookupEnv(val)
-
-			if !ok {
-				args[i] = " "
-			}
-
-			args[i] = env
-		}
-	}
+	args = utils.ExpandVariables(args)
 
 	command := args[0]
 	arguments := args[1:]
