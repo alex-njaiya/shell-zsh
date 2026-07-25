@@ -24,3 +24,8 @@
 2. I/O redirection
 3. Pipes
 4. SuperUser commands
+
+# FEATURE: ENVIRONMENT VARIABLES
+1. Add logic for $$ execution as a command in my shell
+2. Positional parameters
+3. ${VAR} -- syntax with curly braces -- There is a bug in the system such that the prefix and suffix checking in the env variables is not finding the env variable even though I am parsing it correct
