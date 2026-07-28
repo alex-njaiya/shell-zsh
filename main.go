@@ -50,6 +50,7 @@ var path string
 func main() {
 	// homePth, _ := utils.ConfigPath()
 	// fmt.Print(homePth)
+	utils.AnimateWelcome()
 
 
 	inputChan := make(chan []byte)
