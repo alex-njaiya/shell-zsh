@@ -49,6 +49,9 @@ var path string
 var config utils.Config
 
 func main() {
+	// homePth, _ := utils.ConfigPath()
+	// fmt.Print(homePth)
+	utils.AnimateWelcome()
 	// fd for the standard input
 	fd := int(os.Stdin.Fd())
 	var err error
