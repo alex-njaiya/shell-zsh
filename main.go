@@ -21,7 +21,7 @@ const colorPreffix = "\033["
 const (
 	coloReset  string = colorPreffix + "0m"
 	colorGreen string = colorPreffix + "32m"
-	// colorBlue   string = colorPreffix + "34m"
+	colorBlue  string = colorPreffix + "34m"
 	// colorCyan   string = colorPreffix + "36m"
 	colorYellow string = colorPreffix + "33m"
 )
@@ -46,16 +46,33 @@ var cursor int
 var filename = "command-history.txt"
 var foregroundCmd *exec.Cmd
 var path string
+var config utils.Config
 
 func main() {
 	// homePth, _ := utils.ConfigPath()
 	// fmt.Print(homePth)
 	utils.AnimateWelcome()
+	// fd for the standard input
+	fd := int(os.Stdin.Fd())
+	var err error
 
+	if utils.SetUpExists() {
+		config, err = utils.LoadConfig()
+
+		if err != nil {
+			fmt.Printf("Failed to load config, running setup: %s", err)
+			config = utils.RunSetup(fd)
+		}
+
+		fmt.Println("Welcome back, " + config.Username + "!")
+	} else {
+		config = utils.RunSetup(fd)
+		fmt.Printf("\nSetup complete. Welcome, %s\n", config.Username)
+
+	}
 
 	inputChan := make(chan []byte)
 	interruptChan := make(chan struct{}, 1)
-	var err error
 
 	go func() {
 		for {
@@ -79,11 +96,8 @@ func main() {
 	history, err = logger.ReadFromFile()
 
 	if err != nil {
-		fmt.Printf("Error loading history: %v\n", err)
+		// We dont want to display an error because it will show in the input prompt
 	}
-
-	// fd for the standard input
-	fd := int(os.Stdin.Fd())
 
 	// put the terminal into raw mode
 	oldState, err := term.MakeRaw(fd)
@@ -124,17 +138,20 @@ func main() {
 
 outer:
 	for {
-		path, err = getpath()
+		path, err := getpath()
+
+		// append the username and host
+		userspace := utils.AppendUsername(config)
 
 		if err != nil {
-			fmt.Printf("%s > %s", colorGreen, coloReset)
+			fmt.Printf("%s%s$", colorGreen, coloReset)
 			continue
 		}
 
 		if path == "/" {
-			fmt.Printf("%s/ > %s", colorGreen, coloReset)
+			fmt.Printf("%s%s%s%s$ %s", colorGreen, userspace, colorBlue, colorYellow, coloReset)
 		} else {
-			fmt.Printf("%s%s/ %s> %s", colorGreen, path, colorYellow, coloReset)
+			fmt.Printf("%s%s%s%s%s$ %s", colorGreen, userspace, colorBlue, path, colorYellow, coloReset)
 		}
 
 		//read the keyboard input
@@ -181,7 +198,7 @@ outer:
 						fmt.Print("\r\033[K")
 
 						// Reprint your prompt first so it doesn't disappear
-						rePrintPrompt(path)
+						rePrintPrompt(path, userspace)
 						fmt.Print(currentInput)
 					}
 					continue
@@ -194,7 +211,7 @@ outer:
 						// clear any input when the down button is pressed
 						fmt.Print("\r\033[K")
 
-						rePrintPrompt(path)
+						rePrintPrompt(path, userspace)
 
 						if historyIndex == len(history) {
 							// if the hisrory index == end of the history replace with the current input text
@@ -258,7 +275,7 @@ outer:
 					cursor--
 					// redraw the line
 					fmt.Print("\r\033[K")
-					rePrintPrompt(path)
+					rePrintPrompt(path, userspace)
 					fmt.Print(currentInput)
 
 					// move the terminal cursor back to the correct position
@@ -302,7 +319,7 @@ outer:
 						currentInput = matches[0]
 						// redraw the line
 						fmt.Print("\r\033[K")
-						rePrintPrompt(path)
+						rePrintPrompt(path, userspace)
 						fmt.Print(currentInput)
 					}
 
@@ -314,7 +331,7 @@ outer:
 						fmt.Print(strings.Join(matches, " "))
 
 						fmt.Print("\r\n")
-						rePrintPrompt(path)
+						rePrintPrompt(path, userspace)
 						fmt.Print(currentInput)
 					}
 				} else {
@@ -334,7 +351,7 @@ outer:
 							currentInput = completions[0]
 						}
 						fmt.Print("\r\033[K")
-						rePrintPrompt(path)
+						rePrintPrompt(path, userspace)
 						fmt.Print(currentInput)
 					}
 
@@ -350,7 +367,7 @@ outer:
 						fmt.Print("\r\n")
 						fmt.Print(strings.Join(completions, " "))
 						fmt.Print("\r\n")
-						rePrintPrompt(path)
+						rePrintPrompt(path, userspace)
 						fmt.Print(currentInput)
 					}
 				}
@@ -361,7 +378,7 @@ outer:
 				currentInput = currentInput[:cursor] + string(buf[:n]) + currentInput[cursor:]
 				cursor++
 				fmt.Print("\r\033[K")
-				rePrintPrompt(path)
+				rePrintPrompt(path, userspace)
 				fmt.Print(currentInput)
 				// move the terminal back to the correct position
 				correctCursorPos := len(currentInput) - cursor
@@ -409,12 +426,13 @@ func readInput(buf []byte) (input int, err error) {
 
 func execInput(input string) error {
 	// remove the new line characte at the end of the input
-	// TODO: We have to redo this because we are
 	args := strings.Fields(input)
 
 	if len(args) == 0 {
 		return nil
 	}
+
+	args = utils.ExpandVariables(args)
 
 	command := args[0]
 	arguments := args[1:]
@@ -437,6 +455,8 @@ func execInput(input string) error {
 
 		// if there is an argument change to that specific argument
 		return os.Chdir(arguments[0])
+	case "whoami":
+		fmt.Printf("%s", config.Username)
 	case "exit", "Exit":
 		logger := &utils.Write{
 			Filename: filename,
@@ -487,11 +507,13 @@ func getpath() (path string, err error) {
 	cdir, err := os.Getwd()
 
 	if err != nil {
-		return "> ", err
+		return "$ ", err
 	}
 
 	// format the homeDir path to use a tilde instead of the entire path
 	path, err = formatHomeDirPath(cdir)
+
+	// append the username and host on the path
 	return path, err
 }
 
@@ -513,10 +535,10 @@ func formatHomeDirPath(target string) (path string, err error) {
 
 }
 
-func rePrintPrompt(path string) {
+func rePrintPrompt(path string, userspace string) {
 	if path == "/" {
-		fmt.Printf("\r%s/ > %s", colorGreen, coloReset)
+		fmt.Printf("\r%s%s%s%s$ %s", colorGreen, userspace, colorBlue, colorYellow, coloReset)
 	} else {
-		fmt.Printf("\r%s%s/ %s> %s", colorGreen, path, colorYellow, coloReset)
+		fmt.Printf("\r%s%s%s%s%s$ %s", colorGreen, userspace, colorBlue, path, colorYellow, coloReset)
 	}
 }
