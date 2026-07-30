@@ -29,3 +29,13 @@
 1. Add logic for $$ execution as a command in my shell
 2. Positional parameters
 3. ${VAR} -- syntax with curly braces -- There is a bug in the system such that the prefix and suffix checking in the env variables is not finding the env variable even though I am parsing it correct
+
+# FEATURE: INPUT/OUPUT REDIRECTION
+1. Handle > for input redirection. Replaces the existing content in a file with a new input
+2. Handle >> for output redirection with appending. Appends data to the end of a file.
+
+# Strategy on building the I/O redirection
+- Read the token and check for the >, >>, <, < symbols in the token
+- For the part before the symbol execute the command
+- For the part after the symbol open/read/append into the file
+- Handle the above three logic for all the symbols.

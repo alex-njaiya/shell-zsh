@@ -49,8 +49,6 @@ var path string
 var config utils.Config
 
 func main() {
-	// homePth, _ := utils.ConfigPath()
-	// fmt.Print(homePth)
 	utils.AnimateWelcome()
 	// fd for the standard input
 	fd := int(os.Stdin.Fd())
@@ -431,6 +429,7 @@ func execInput(input string) error {
 	if len(args) == 0 {
 		return nil
 	}
+	utils.InputOutputRedirection(args)
 
 	args = utils.ExpandVariables(args)
 
