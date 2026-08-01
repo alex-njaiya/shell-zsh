@@ -4,6 +4,8 @@ A POSIX-inspired shell implemented from first principles — no readline library
 no shell-parsing package. Just raw syscalls, a hand-rolled parser, and signal
 handling done the hard way.
 
+[![asciicast](https://asciinema.org/a/HkXTQXoc9ky3e7jn.svg)](https://asciinema.org/a/HkXTQXoc9ky3e7jn)
+
 
 ## Why I built this
 
