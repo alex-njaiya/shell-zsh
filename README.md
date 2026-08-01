@@ -34,6 +34,16 @@ A quick look under the hood:
 4. **Execute** — the shell forks and execs the target binary, tracking its PID as the foreground process
 5. **Signal routing** — the shell installs its own signal handlers and forwards relevant signals to the foreground child, so Ctrl-C interrupts your program instead of the shell.
 
+## Quickstart
+
+```bash
+git clone https://github.com/alex-njaiya/shell-zsh.git
+cd shell-zsh
+go mod tidy
+go build -o shell-zsh .
+./shell-zsh
+```
+
 ## What's next
 
 - Pipes (`|`)
